@@ -7,6 +7,38 @@ import math
 from PIL import Image
 import random
 
+import torch
+import torch.nn.functional as F
+from torchvision.transforms import Compose
+from tqdm import tqdm
+
+from depth_anything.dpt import DepthAnything
+from depth_anything.util.transform import Resize, NormalizeImage, PrepareForNet
+
+model_configs = {
+    'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
+    'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
+    'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]}
+}
+
+encoder = 'vits' # or 'vitb', 'vits'
+depth_anything = DepthAnything(model_configs[encoder])
+depth_anything.load_state_dict(torch.load(f'./checkpoints/depth_anything_{encoder}14.pth'))
+
+transform = Compose([
+    Resize(
+        width=518,
+        height=518,
+        resize_target=False,
+        keep_aspect_ratio=True,
+        ensure_multiple_of=14,
+        resize_method='lower_bound',
+        image_interpolation_method=cv2.INTER_CUBIC,
+    ),
+    NormalizeImage(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    PrepareForNet(),
+])
+
 # map_size = (20, 20)
 map_height = 10
 image_shape = (84,84)
@@ -82,12 +114,12 @@ class drone_env(gym.Env):
     def _get_obs(self):
         self.drone_state = self.drone.getMultirotorState()
 
-        # depth map
-        responses = self.drone.simGetImages([self.image_request])
-        try:
-            image = self.transform_obs(responses)
-        except:
-            image = np.zeros(shape=(1,image_shape[0],image_shape[1]))
+        # # depth map
+        # # responses = self.drone.simGetImages([self.image_request])
+        # try:
+        #     image = self.transform_obs(responses)
+        # except:
+        #     image = np.zeros(shape=(1,image_shape[0],image_shape[1]))
 
         self.states['depth_map'] = image
 
