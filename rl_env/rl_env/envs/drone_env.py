@@ -78,7 +78,8 @@ class drone_env(gym.Env):
 
         # available target locations
         self.available_target_locations = [(0,40)]
-        self.image_request = airsim.ImageRequest("0", airsim.ImageType.DepthPerspective, True, False)
+        #self.image_request = airsim.ImageRequest("0", airsim.ImageType.DepthPerspective, True, False)
+        self.image_request = airsim.ImageRequest("0", airsim.ImageType.Scene, True, False)
 
         self.step_counter = 0
         
@@ -115,11 +116,21 @@ class drone_env(gym.Env):
         self.drone_state = self.drone.getMultirotorState()
 
         # # depth map
-        # # responses = self.drone.simGetImages([self.image_request])
-        # try:
-        #     image = self.transform_obs(responses)
-        # except:
-        #     image = np.zeros(shape=(1,image_shape[0],image_shape[1]))
+        responses = self.drone.simGetImages([self.image_request])
+        try:
+            image = self.transform_obs(responses)
+        except:
+            image = np.zeros(shape=(1,image_shape[0],image_shape[1]))
+        h, w = image.shape[:2]
+
+        image = torch.from_numpy(image).unsqueeze(0).to('CPU')
+    
+        with torch.no_grad():
+            depth = depth_anything(image)
+        
+        depth = F.interpolate(depth[None], (h, w), mode='bilinear', align_corners=False)[0, 0]
+        depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
+        image = depth.cpu().numpy().astype(np.uint8)
 
         self.states['depth_map'] = image
 
